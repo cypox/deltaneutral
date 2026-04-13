@@ -1,0 +1,41 @@
+services:
+  tradingbot:
+    build: .
+    container_name: tradingbot
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    command: ["run", "--config", "config/config.yaml"]
+
+  backtest:
+    build: .
+    container_name: tradingbot-backtest
+    profiles:
+      - backtest
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    command: >
+      backtest
+        --config config/config.yaml
+        --symbol BTC/USDT
+        --output data/backtest_results
+
+  download:
+    build: .
+    container_name: tradingbot-download
+    profiles:
+      - download
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    command: >
+      download
+        --config config/config.yaml
+        --exchange binance
+        --symbol BTC/USDT
+        --start 2024-01-01

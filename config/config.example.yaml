@@ -1,0 +1,156 @@
+# Delta-Neutral Strategy Configuration
+# Copy to config.yaml and fill in your exchange API keys
+
+app:
+  name: "tradingbot"
+  log_level: "INFO"
+  data_dir: "./data"
+  db_url: "sqlite+aiosqlite:///./data/tradingbot.db"
+
+exchanges:
+  binance:
+    enabled: true
+    api_key: "${BINANCE_API_KEY}"
+    secret: "${BINANCE_SECRET}"
+    sandbox: false
+    rate_limit: true
+    options:
+      defaultType: "spot"
+
+  bybit:
+    enabled: true
+    api_key: "${BYBIT_API_KEY}"
+    secret: "${BYBIT_SECRET}"
+    sandbox: false
+    rate_limit: true
+    options:
+      defaultType: "swap"
+
+  okx:
+    enabled: true
+    api_key: "${OKX_API_KEY}"
+    secret: "${OKX_SECRET}"
+    password: "${OKX_PASSWORD}"
+    sandbox: false
+    rate_limit: true
+    options:
+      defaultType: "swap"
+
+strategy:
+  name: "delta_neutral_funding"
+  symbols:
+    - "BTC/USDT"
+    - "ETH/USDT"
+    - "SOL/USDT"
+
+  # Minimum annualized funding rate to enter a position (e.g. 10% APR)
+  min_funding_rate_apr: 0.10
+
+  # Maximum allowed spread between spot and perp entry prices
+  max_entry_spread_pct: 0.003
+
+  # Position sizing
+  max_position_usd: 10000.0
+  min_position_usd: 100.0
+  max_total_exposure_usd: 50000.0
+
+  # How often to check funding rates (seconds)
+  funding_check_interval: 300
+
+  # Exit when funding rate drops below this APR
+  exit_funding_rate_apr: 0.02
+
+  # Maximum leverage for perpetual leg
+  max_leverage: 3
+
+fees:
+  # Override exchange-reported fees if needed (as decimal, e.g., 0.001 = 0.1%)
+  # Leave empty to use exchange-reported fees
+  overrides: {}
+  # Include estimated slippage in fee calculations
+  slippage_bps: 5
+  # Include withdrawal fees in cross-exchange cost calculations
+  include_withdrawal_fees: true
+
+risk:
+  # Maximum drawdown before emergency shutdown (percentage)
+  max_drawdown_pct: 0.05
+
+  # Maximum single-position loss before closing
+  max_position_loss_pct: 0.03
+
+  # Margin ratio alert threshold (0-1, exchange will liquidate near 1.0)
+  margin_ratio_alert: 0.7
+
+  # Maximum funding rate to avoid (extremely high rates often precede reversals)
+  max_funding_rate_apr: 2.0
+
+  # Minimum free margin to maintain on each exchange (USD)
+  min_free_margin_usd: 5000.0
+
+  # Health check interval (seconds)
+  health_check_interval: 60
+
+  # Circuit breaker: pause trading after N consecutive errors
+  max_consecutive_errors: 5
+
+  # Perp position amount validation tolerance (percentage)
+  position_amount_tolerance_pct: 0.01
+
+execution:
+  # Order type: "limit" or "market"
+  default_order_type: "limit"
+
+  # For limit orders: offset from mid-price in bps
+  limit_offset_bps: 2
+
+  # Maximum retries for failed orders
+  max_retries: 3
+
+  # Time to wait for limit order fill before cancelling (seconds)
+  limit_order_timeout: 30
+
+  # Use TWAP for large orders above this threshold (USD)
+  twap_threshold_usd: 5000.0
+
+  # TWAP: number of slices
+  twap_slices: 5
+
+  # TWAP: interval between slices (seconds)
+  twap_interval: 10
+
+  # Reconciliation interval (seconds)
+  reconciliation_interval: 120
+
+backtest:
+  # Start date for backtest data
+  start_date: "2024-01-01"
+  end_date: "2025-01-01"
+
+  # Initial capital
+  initial_capital: 100000.0
+
+  # Data source: "exchange" or "local"
+  data_source: "exchange"
+
+  # Timeframe for OHLCV data
+  timeframe: "1h"
+
+  # Simulate funding every 8h (standard for most exchanges)
+  funding_interval_hours: 8
+
+logging:
+  version: 1
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+    file:
+      class: logging.handlers.RotatingFileHandler
+      filename: logs/tradingbot.log
+      maxBytes: 10485760
+      backupCount: 5
+      level: DEBUG
+  root:
+    level: DEBUG
+    handlers: [console, file]
