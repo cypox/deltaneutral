@@ -281,6 +281,106 @@ def estimate(capital: float, funding_rate: float, taker_fee: float, leverage: in
 
 
 @main.command()
+@click.option("--config", "-c", default="config/config.yaml", help="Config file path")
+@click.option("--exchanges", "-e", multiple=True, default=["binance", "bybit"], help="Exchanges to rank")
+def rank(config: str, exchanges: tuple[str, ...]) -> None:
+    """Rank exchanges by cost-effectiveness for delta-neutral trading.
+
+    Scores each exchange on taker fees, funding rates, and symbol availability.
+
+    Examples:
+        tradingbot rank
+        tradingbot rank -e binance -e bybit -e okx
+    """
+    from tradingbot.config.settings import ExchangeConfig, Settings
+    from tradingbot.exchanges.factory import create_and_connect
+    from tradingbot.strategy.scanner import PairScanner, format_exchange_ranking
+
+    settings = Settings.from_yaml(config) if Path(config).exists() else Settings.default()
+
+    async def _rank() -> None:
+        connectors: dict[str, Any] = {}
+        for ex_id in exchanges:
+            ex_config = settings.exchanges.get(ex_id, ExchangeConfig())
+            try:
+                click.echo(f"Connecting to {ex_id}...")
+                connector = await create_and_connect(ex_id, ex_config)
+                connectors[ex_id] = connector
+            except Exception as e:
+                click.echo(f"Failed to connect to {ex_id}: {e}")
+
+        if not connectors:
+            click.echo("No exchanges connected.")
+            return
+
+        scanner = PairScanner(
+            exchanges=connectors,
+            slippage_bps=settings.fees.slippage_bps,
+            leverage=settings.strategy.max_leverage,
+        )
+
+        click.echo(f"Ranking {len(connectors)} exchange(s)...")
+        rankings = await scanner.rank_exchanges()
+        click.echo(format_exchange_ranking(rankings))
+
+        for connector in connectors.values():
+            await connector.close()
+
+    asyncio.run(_rank())
+
+
+@main.command()
+@click.option("--config", "-c", default="config/config.yaml", help="Config file path")
+@click.option("--exchanges", "-e", multiple=True, default=["binance", "bybit"], help="Exchanges to check")
+@click.option("--top", default=20, help="Number of top routes to show")
+def routes(config: str, exchanges: tuple[str, ...], top: int) -> None:
+    """Find the optimal exchange route per symbol.
+
+    For each trading pair, shows which exchange to buy spot on and which
+    to short perp on for minimum fees and maximum funding income.
+
+    Examples:
+        tradingbot routes
+        tradingbot routes -e binance -e bybit -e okx --top 10
+    """
+    from tradingbot.config.settings import ExchangeConfig, Settings
+    from tradingbot.exchanges.factory import create_and_connect
+    from tradingbot.strategy.scanner import PairScanner, format_route_report
+
+    settings = Settings.from_yaml(config) if Path(config).exists() else Settings.default()
+
+    async def _routes() -> None:
+        connectors: dict[str, Any] = {}
+        for ex_id in exchanges:
+            ex_config = settings.exchanges.get(ex_id, ExchangeConfig())
+            try:
+                click.echo(f"Connecting to {ex_id}...")
+                connector = await create_and_connect(ex_id, ex_config)
+                connectors[ex_id] = connector
+            except Exception as e:
+                click.echo(f"Failed to connect to {ex_id}: {e}")
+
+        if not connectors:
+            click.echo("No exchanges connected.")
+            return
+
+        scanner = PairScanner(
+            exchanges=connectors,
+            slippage_bps=settings.fees.slippage_bps,
+            leverage=settings.strategy.max_leverage,
+        )
+
+        click.echo(f"Finding optimal routes across {len(connectors)} exchange(s)...")
+        best_routes = await scanner.find_best_routes()
+        click.echo(format_route_report(best_routes[:top]))
+
+        for connector in connectors.values():
+            await connector.close()
+
+    asyncio.run(_routes())
+
+
+@main.command()
 def status() -> None:
     """Show current bot status (positions, PnL, risk)."""
     click.echo("Status check requires a running instance. Use monitoring endpoint.")

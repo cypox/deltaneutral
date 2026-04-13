@@ -1,8 +1,14 @@
 """
-Pair Scanner & Profitability Estimator
+Pair Scanner & Profitability Estimator — Exchange Ranking Library
 
 Scans all available perpetual futures across configured exchanges to find
 the best delta-neutral funding arbitrage opportunities, ranked by net APR.
+
+Features:
+  - Cross-exchange pair scanning: finds optimal spot × perp exchange combos
+  - Exchange ranking: scores each exchange by fees, funding rates & availability
+  - Route optimization: picks the cheapest execution route per symbol
+  - Profitability estimates for a given capital amount
 
 Also estimates realistic daily/monthly returns for a given capital amount,
 accounting for fees, slippage, and position constraints.
@@ -31,6 +37,64 @@ DEFAULT_SCAN_SYMBOLS = [
     "TIA/USDT", "SEI/USDT", "INJ/USDT", "FET/USDT", "PEPE/USDT",
     "WIF/USDT", "RENDER/USDT", "STX/USDT", "IMX/USDT", "AAVE/USDT",
 ]
+
+
+# ─── Exchange Ranking ────────────────────────────────────────────────────────
+
+
+@dataclass
+class ExchangeScore:
+    """Ranking score for a single exchange across all scanned symbols."""
+
+    exchange: str
+    avg_taker_fee: float = 0.0         # average taker fee across symbols
+    avg_funding_rate: float = 0.0      # average absolute funding rate
+    symbols_available: int = 0          # how many of the scanned symbols are listed
+    total_symbols_scanned: int = 0
+    availability_pct: float = 0.0       # symbols_available / total
+    # Composite score: higher = better for delta-neutral trading
+    # Low fees + high funding + high availability → high score
+    composite_score: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "exchange": self.exchange,
+            "avg_taker_fee": f"{self.avg_taker_fee:.4%}",
+            "avg_funding_rate": f"{self.avg_funding_rate:.6f}",
+            "symbols_available": self.symbols_available,
+            "availability": f"{self.availability_pct:.1%}",
+            "score": f"{self.composite_score:.2f}",
+        }
+
+
+@dataclass
+class ExchangeRoute:
+    """Optimal route for trading a symbol: which exchange to buy spot, which to short perp."""
+
+    symbol: str
+    spot_exchange: str
+    perp_exchange: str
+    spot_taker_fee: float
+    perp_taker_fee: float
+    funding_rate: float
+    funding_rate_apr: float
+    combined_fee: float       # spot taker + perp taker
+    net_apr: float
+    reason: str               # why this route was chosen
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "spot_exchange": self.spot_exchange,
+            "perp_exchange": self.perp_exchange,
+            "spot_fee": f"{self.spot_taker_fee:.4%}",
+            "perp_fee": f"{self.perp_taker_fee:.4%}",
+            "combined_fee": f"{self.combined_fee:.4%}",
+            "funding_rate": f"{self.funding_rate:.6f}",
+            "funding_apr": f"{self.funding_rate_apr:.2%}",
+            "net_apr": f"{self.net_apr:.2%}",
+            "reason": self.reason,
+        }
 
 
 @dataclass
@@ -118,9 +182,21 @@ class PairScanner:
 
     Usage:
         scanner = PairScanner(exchanges={"binance": binance_connector, "bybit": bybit_connector})
+
+        # Full scan with profitability estimates
         result = await scanner.scan(capital_usd=500.0)
         for opp in result.profitable:
             print(f"{opp.symbol}: {opp.net_apr:.2%} APR, ${opp.daily_net_usd:.4f}/day")
+
+        # Rank exchanges by cost-effectiveness
+        rankings = await scanner.rank_exchanges()
+        for r in rankings:
+            print(f"{r.exchange}: score={r.composite_score:.2f}")
+
+        # Find optimal trading route per symbol
+        routes = await scanner.find_best_routes()
+        for route in routes:
+            print(f"{route.symbol}: buy on {route.spot_exchange}, short on {route.perp_exchange}")
     """
 
     def __init__(
@@ -132,6 +208,20 @@ class PairScanner:
         self._exchanges = exchanges
         self._slippage_bps = slippage_bps
         self._leverage = leverage
+
+    async def _gather_exchange_data(
+        self, symbols: list[str] | None = None,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        """Fetch ticker, funding rate, and fees for every symbol on every exchange."""
+        scan_symbols = symbols or DEFAULT_SCAN_SYMBOLS
+        exchange_data: dict[str, dict[str, dict[str, Any]]] = {}
+        for ex_name, exchange in self._exchanges.items():
+            exchange_data[ex_name] = {}
+            for symbol in scan_symbols:
+                data = await self._fetch_symbol_data(exchange, ex_name, symbol)
+                if data:
+                    exchange_data[ex_name][symbol] = data
+        return exchange_data
 
     async def scan(
         self,
@@ -156,13 +246,7 @@ class PairScanner:
         )
 
         # Gather data from all exchanges
-        exchange_data: dict[str, dict[str, dict[str, Any]]] = {}
-        for ex_name, exchange in self._exchanges.items():
-            exchange_data[ex_name] = {}
-            for symbol in scan_symbols:
-                data = await self._fetch_symbol_data(exchange, ex_name, symbol)
-                if data:
-                    exchange_data[ex_name][symbol] = data
+        exchange_data = await self._gather_exchange_data(scan_symbols)
 
         # Find cross-exchange opportunities
         exchange_names = list(self._exchanges.keys())
@@ -223,6 +307,134 @@ class PairScanner:
             # Symbol not available on this exchange — expected for many pairs
             log.debug("symbol_not_available", exchange=ex_name, symbol=symbol, error=str(e))
             return None
+
+    # ─── Exchange Ranking ────────────────────────────────────────────────
+
+    async def rank_exchanges(
+        self, symbols: list[str] | None = None,
+    ) -> list[ExchangeScore]:
+        """
+        Rank each exchange by cost-effectiveness for delta-neutral trading.
+
+        Scoring considers:
+          - Average taker fee (lower is better, weight: 40%)
+          - Average absolute funding rate (higher is better, weight: 35%)
+          - Symbol availability (higher is better, weight: 25%)
+
+        Returns a list of ExchangeScore sorted by composite_score descending.
+        """
+        scan_symbols = symbols or DEFAULT_SCAN_SYMBOLS
+        exchange_data = await self._gather_exchange_data(scan_symbols)
+
+        scores: list[ExchangeScore] = []
+        for ex_name, sym_data in exchange_data.items():
+            if not sym_data:
+                scores.append(ExchangeScore(
+                    exchange=ex_name,
+                    total_symbols_scanned=len(scan_symbols),
+                ))
+                continue
+
+            fees = [d["fees"].taker for d in sym_data.values()]
+            rates = [abs(d["funding"].rate) for d in sym_data.values()]
+            avg_fee = sum(fees) / len(fees) if fees else 0
+            avg_rate = sum(rates) / len(rates) if rates else 0
+            avail = len(sym_data) / len(scan_symbols) if scan_symbols else 0
+
+            scores.append(ExchangeScore(
+                exchange=ex_name,
+                avg_taker_fee=avg_fee,
+                avg_funding_rate=avg_rate,
+                symbols_available=len(sym_data),
+                total_symbols_scanned=len(scan_symbols),
+                availability_pct=avail,
+            ))
+
+        # Normalize and compute composite score
+        _compute_composite_scores(scores)
+
+        scores.sort(key=lambda s: s.composite_score, reverse=True)
+
+        log.info(
+            "exchange_ranking_complete",
+            exchanges=len(scores),
+            best=scores[0].exchange if scores else "none",
+        )
+        return scores
+
+    async def find_best_routes(
+        self, symbols: list[str] | None = None,
+    ) -> list[ExchangeRoute]:
+        """
+        For each symbol, find the optimal exchange route (spot exchange + perp exchange)
+        that minimizes fees while maximising funding income.
+
+        Returns a list of ExchangeRoute sorted by net_apr descending.
+        """
+        scan_symbols = symbols or DEFAULT_SCAN_SYMBOLS
+        exchange_data = await self._gather_exchange_data(scan_symbols)
+        exchange_names = list(self._exchanges.keys())
+        slippage = bps_to_decimal(self._slippage_bps)
+
+        routes: list[ExchangeRoute] = []
+        for symbol in scan_symbols:
+            best_route: ExchangeRoute | None = None
+            for spot_ex in exchange_names:
+                for perp_ex in exchange_names:
+                    spot_data = exchange_data.get(spot_ex, {}).get(symbol)
+                    perp_data = exchange_data.get(perp_ex, {}).get(symbol)
+                    if not spot_data or not perp_data:
+                        continue
+
+                    funding: FundingRate = perp_data["funding"]
+                    if funding.rate <= 0:
+                        continue
+
+                    spot_fee: float = spot_data["fees"].taker
+                    perp_fee: float = perp_data["fees"].taker
+                    combined = spot_fee + perp_fee
+                    funding_apr = funding_rate_to_apr(funding.rate)
+
+                    # Net APR: funding income minus annualized round-trip fees (30d hold)
+                    round_trip = (combined * 2) + (slippage * 4)
+                    net_apr = funding_apr - round_trip * (365 / 30)
+
+                    reason_parts: list[str] = []
+                    if spot_ex == perp_ex:
+                        reason_parts.append("same-exchange (no transfer)")
+                    else:
+                        reason_parts.append("cross-exchange")
+                    if combined <= 0.001:
+                        reason_parts.append("low fees")
+                    if funding.rate >= 0.0003:
+                        reason_parts.append("high funding")
+
+                    candidate = ExchangeRoute(
+                        symbol=symbol,
+                        spot_exchange=spot_ex,
+                        perp_exchange=perp_ex,
+                        spot_taker_fee=spot_fee,
+                        perp_taker_fee=perp_fee,
+                        funding_rate=funding.rate,
+                        funding_rate_apr=funding_apr,
+                        combined_fee=combined,
+                        net_apr=net_apr,
+                        reason=", ".join(reason_parts) if reason_parts else "default",
+                    )
+
+                    if best_route is None or candidate.net_apr > best_route.net_apr:
+                        best_route = candidate
+
+            if best_route is not None:
+                routes.append(best_route)
+
+        routes.sort(key=lambda r: r.net_apr, reverse=True)
+
+        log.info(
+            "route_optimization_complete",
+            symbols_with_routes=len(routes),
+        )
+        return routes
 
     def _evaluate_opportunity(
         self,
@@ -334,6 +546,93 @@ class PairScanner:
             days_to_breakeven=days_to_breakeven,
             min_hold_days=days_to_breakeven,
         )
+
+
+# ─── Scoring helpers ─────────────────────────────────────────────────────────
+
+
+def _compute_composite_scores(scores: list[ExchangeScore]) -> None:
+    """Normalise metrics and compute a weighted composite score in-place."""
+    if not scores:
+        return
+
+    max_fee = max((s.avg_taker_fee for s in scores), default=1) or 1
+    max_rate = max((s.avg_funding_rate for s in scores), default=1) or 1
+
+    for s in scores:
+        # Lower fee → higher score (inverted)
+        fee_score = 1.0 - (s.avg_taker_fee / max_fee)
+        # Higher funding → higher score
+        funding_score = s.avg_funding_rate / max_rate
+        # Availability as-is
+        avail_score = s.availability_pct
+
+        s.composite_score = (
+            fee_score * 0.40
+            + funding_score * 0.35
+            + avail_score * 0.25
+        )
+
+
+# ─── Formatting ──────────────────────────────────────────────────────────────
+
+
+def format_exchange_ranking(rankings: list[ExchangeScore]) -> str:
+    """Format exchange rankings into a readable CLI report."""
+    lines: list[str] = []
+    lines.append("")
+    lines.append("=" * 80)
+    lines.append("  EXCHANGE RANKING — Best Exchanges for Delta-Neutral Trading")
+    lines.append("=" * 80)
+    lines.append(
+        f"  {'#':<3} {'Exchange':<12} {'Avg Fee':>10} {'Avg Fund':>10} "
+        f"{'Symbols':>8} {'Avail':>8} {'Score':>8}"
+    )
+    lines.append("-" * 80)
+
+    for i, r in enumerate(rankings, 1):
+        lines.append(
+            f"  {i:<3} {r.exchange:<12} {r.avg_taker_fee:>9.4%} "
+            f"{r.avg_funding_rate:>10.6f} {r.symbols_available:>8} "
+            f"{r.availability_pct:>7.1%} {r.composite_score:>8.2f}"
+        )
+
+    lines.append("=" * 80)
+    if rankings:
+        lines.append(f"  Best exchange: {rankings[0].exchange} (score: {rankings[0].composite_score:.2f})")
+        lines.append("  Score weights: 40% low fees, 35% high funding, 25% symbol availability")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_route_report(routes: list[ExchangeRoute]) -> str:
+    """Format optimal routes into a readable CLI report."""
+    lines: list[str] = []
+    lines.append("")
+    lines.append("=" * 90)
+    lines.append("  OPTIMAL ROUTES — Best Exchange Pair per Symbol")
+    lines.append("=" * 90)
+    lines.append(
+        f"  {'#':<3} {'Symbol':<12} {'Spot':<9} {'Perp':<9} "
+        f"{'Fees':>8} {'Fund APR':>10} {'Net APR':>10} {'Reason'}"
+    )
+    lines.append("-" * 90)
+
+    for i, route in enumerate(routes[:30], 1):
+        lines.append(
+            f"  {i:<3} {route.symbol:<12} {route.spot_exchange:<9} "
+            f"{route.perp_exchange:<9} {route.combined_fee:>7.4%} "
+            f"{route.funding_rate_apr:>9.2%} {route.net_apr:>9.2%}  "
+            f"{route.reason}"
+        )
+
+    lines.append("=" * 90)
+    if routes:
+        lines.append(f"  Top route: {routes[0].symbol} via {routes[0].spot_exchange}→{routes[0].perp_exchange}")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 def format_scan_report(result: ScanResult) -> str:

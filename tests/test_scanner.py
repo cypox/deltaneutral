@@ -12,7 +12,15 @@ from tradingbot.exchanges.base import (
     FundingRate,
     Ticker,
 )
-from tradingbot.strategy.scanner import PairScanner, format_scan_report
+from tradingbot.strategy.scanner import (
+    ExchangeRoute,
+    ExchangeScore,
+    PairScanner,
+    _compute_composite_scores,
+    format_exchange_ranking,
+    format_route_report,
+    format_scan_report,
+)
 
 
 class TestPairScanner:
@@ -184,3 +192,221 @@ class TestProfitabilityMath:
         daily_funding = 0.075
         breakeven = entry_cost / daily_funding
         assert breakeven == pytest.approx(13.33, rel=0.01)
+
+
+# ─── Exchange Ranking Tests ─────────────────────────────────────────────────
+
+
+class TestExchangeRanking:
+    @pytest.fixture
+    def mock_binance(self) -> AsyncMock:
+        exchange = AsyncMock()
+        exchange.name = "binance"
+        exchange.fetch_ticker.return_value = Ticker(
+            symbol="BTC/USDT", bid=60000.0, ask=60010.0, last=60005.0, timestamp=0
+        )
+        exchange.fetch_funding_rate.return_value = FundingRate(
+            symbol="BTC/USDT", rate=0.0003, next_funding_time=0, interval_hours=8
+        )
+        exchange.fetch_fee_schedule.return_value = FeeSchedule(maker=0.0002, taker=0.0004)
+        return exchange
+
+    @pytest.fixture
+    def mock_bybit(self) -> AsyncMock:
+        exchange = AsyncMock()
+        exchange.name = "bybit"
+        exchange.fetch_ticker.return_value = Ticker(
+            symbol="BTC/USDT", bid=59990.0, ask=60000.0, last=59995.0, timestamp=0
+        )
+        exchange.fetch_funding_rate.return_value = FundingRate(
+            symbol="BTC/USDT", rate=0.0002, next_funding_time=0, interval_hours=8
+        )
+        exchange.fetch_fee_schedule.return_value = FeeSchedule(maker=0.0002, taker=0.0006)
+        return exchange
+
+    @pytest.mark.asyncio
+    async def test_rank_exchanges_returns_scores(self, mock_binance, mock_bybit):
+        scanner = PairScanner(exchanges={"binance": mock_binance, "bybit": mock_bybit})
+        rankings = await scanner.rank_exchanges(symbols=["BTC/USDT"])
+
+        assert len(rankings) == 2
+        assert all(isinstance(r, ExchangeScore) for r in rankings)
+
+    @pytest.mark.asyncio
+    async def test_rank_exchanges_best_has_highest_score(self, mock_binance, mock_bybit):
+        scanner = PairScanner(exchanges={"binance": mock_binance, "bybit": mock_bybit})
+        rankings = await scanner.rank_exchanges(symbols=["BTC/USDT"])
+
+        # Should be sorted by score descending
+        assert rankings[0].composite_score >= rankings[1].composite_score
+
+    @pytest.mark.asyncio
+    async def test_rank_exchanges_lower_fee_preferred(self, mock_binance, mock_bybit):
+        """Binance has 0.04% taker vs bybit 0.06%, so binance should rank higher."""
+        scanner = PairScanner(exchanges={"binance": mock_binance, "bybit": mock_bybit})
+        rankings = await scanner.rank_exchanges(symbols=["BTC/USDT"])
+
+        # binance: lower fee + higher funding → should be first
+        assert rankings[0].exchange == "binance"
+
+    @pytest.mark.asyncio
+    async def test_rank_exchanges_empty(self):
+        scanner = PairScanner(exchanges={})
+        rankings = await scanner.rank_exchanges(symbols=["BTC/USDT"])
+        assert rankings == []
+
+    @pytest.mark.asyncio
+    async def test_rank_exchanges_availability(self, mock_binance):
+        """Single exchange scanning 1 symbol → 100% availability."""
+        scanner = PairScanner(exchanges={"binance": mock_binance})
+        rankings = await scanner.rank_exchanges(symbols=["BTC/USDT"])
+
+        assert rankings[0].symbols_available == 1
+        assert rankings[0].availability_pct == pytest.approx(1.0)
+
+    def test_compute_composite_scores(self):
+        scores = [
+            ExchangeScore(exchange="a", avg_taker_fee=0.0004, avg_funding_rate=0.0003,
+                          symbols_available=10, total_symbols_scanned=10, availability_pct=1.0),
+            ExchangeScore(exchange="b", avg_taker_fee=0.0006, avg_funding_rate=0.0001,
+                          symbols_available=5, total_symbols_scanned=10, availability_pct=0.5),
+        ]
+        _compute_composite_scores(scores)
+
+        assert scores[0].composite_score > scores[1].composite_score
+
+    def test_compute_composite_scores_empty(self):
+        scores: list[ExchangeScore] = []
+        _compute_composite_scores(scores)  # should not raise
+
+    def test_format_exchange_ranking(self, mock_binance):
+        scores = [
+            ExchangeScore(
+                exchange="binance", avg_taker_fee=0.0004, avg_funding_rate=0.0003,
+                symbols_available=10, total_symbols_scanned=10,
+                availability_pct=1.0, composite_score=0.85,
+            ),
+        ]
+        report = format_exchange_ranking(scores)
+        assert "EXCHANGE RANKING" in report
+        assert "binance" in report
+
+    def test_exchange_score_to_dict(self):
+        score = ExchangeScore(
+            exchange="binance", avg_taker_fee=0.0005, avg_funding_rate=0.0003,
+            symbols_available=10, total_symbols_scanned=10,
+            availability_pct=1.0, composite_score=0.9,
+        )
+        d = score.to_dict()
+        assert d["exchange"] == "binance"
+        assert "score" in d
+
+
+# ─── Route Optimization Tests ───────────────────────────────────────────────
+
+
+class TestRouteOptimization:
+    @pytest.fixture
+    def mock_cheap_exchange(self) -> AsyncMock:
+        exchange = AsyncMock()
+        exchange.name = "cheap_ex"
+        exchange.fetch_ticker.return_value = Ticker(
+            symbol="BTC/USDT", bid=60000.0, ask=60010.0, last=60005.0, timestamp=0
+        )
+        exchange.fetch_funding_rate.return_value = FundingRate(
+            symbol="BTC/USDT", rate=0.0004, next_funding_time=0, interval_hours=8
+        )
+        exchange.fetch_fee_schedule.return_value = FeeSchedule(maker=0.0001, taker=0.0003)
+        return exchange
+
+    @pytest.fixture
+    def mock_expensive_exchange(self) -> AsyncMock:
+        exchange = AsyncMock()
+        exchange.name = "expensive_ex"
+        exchange.fetch_ticker.return_value = Ticker(
+            symbol="BTC/USDT", bid=59990.0, ask=60020.0, last=60005.0, timestamp=0
+        )
+        exchange.fetch_funding_rate.return_value = FundingRate(
+            symbol="BTC/USDT", rate=0.0002, next_funding_time=0, interval_hours=8
+        )
+        exchange.fetch_fee_schedule.return_value = FeeSchedule(maker=0.0005, taker=0.001)
+        return exchange
+
+    @pytest.mark.asyncio
+    async def test_find_best_routes_returns_routes(self, mock_cheap_exchange, mock_expensive_exchange):
+        scanner = PairScanner(
+            exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
+        )
+        routes = await scanner.find_best_routes(symbols=["BTC/USDT"])
+
+        assert len(routes) >= 1
+        assert all(isinstance(r, ExchangeRoute) for r in routes)
+
+    @pytest.mark.asyncio
+    async def test_find_best_routes_picks_cheapest(self, mock_cheap_exchange, mock_expensive_exchange):
+        scanner = PairScanner(
+            exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
+        )
+        routes = await scanner.find_best_routes(symbols=["BTC/USDT"])
+
+        # Best route should maximize net_apr → prefer cheap exchange for perp (higher funding too)
+        best = routes[0]
+        assert best.perp_exchange == "cheap"
+
+    @pytest.mark.asyncio
+    async def test_find_best_routes_sorted_by_net_apr(self, mock_cheap_exchange, mock_expensive_exchange):
+        scanner = PairScanner(
+            exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
+        )
+        routes = await scanner.find_best_routes(symbols=["BTC/USDT", "ETH/USDT"])
+
+        # Routes should be sorted by net_apr descending
+        for i in range(len(routes) - 1):
+            assert routes[i].net_apr >= routes[i + 1].net_apr
+
+    @pytest.mark.asyncio
+    async def test_find_best_routes_negative_funding_skipped(self):
+        exchange = AsyncMock()
+        exchange.name = "neg"
+        exchange.fetch_ticker.return_value = Ticker(
+            symbol="BTC/USDT", bid=60000.0, ask=60010.0, last=60005.0, timestamp=0
+        )
+        exchange.fetch_funding_rate.return_value = FundingRate(
+            symbol="BTC/USDT", rate=-0.0001, next_funding_time=0, interval_hours=8
+        )
+        exchange.fetch_fee_schedule.return_value = FeeSchedule(maker=0.0002, taker=0.0005)
+
+        scanner = PairScanner(exchanges={"neg": exchange})
+        routes = await scanner.find_best_routes(symbols=["BTC/USDT"])
+        assert len(routes) == 0
+
+    @pytest.mark.asyncio
+    async def test_find_best_routes_empty_exchanges(self):
+        scanner = PairScanner(exchanges={})
+        routes = await scanner.find_best_routes(symbols=["BTC/USDT"])
+        assert routes == []
+
+    def test_exchange_route_to_dict(self):
+        route = ExchangeRoute(
+            symbol="BTC/USDT", spot_exchange="binance", perp_exchange="bybit",
+            spot_taker_fee=0.0005, perp_taker_fee=0.0004,
+            funding_rate=0.0003, funding_rate_apr=0.328,
+            combined_fee=0.0009, net_apr=0.22, reason="cross-exchange, low fees",
+        )
+        d = route.to_dict()
+        assert d["symbol"] == "BTC/USDT"
+        assert d["spot_exchange"] == "binance"
+        assert "reason" in d
+
+    def test_format_route_report(self):
+        routes = [
+            ExchangeRoute(
+                symbol="BTC/USDT", spot_exchange="binance", perp_exchange="bybit",
+                spot_taker_fee=0.0005, perp_taker_fee=0.0004,
+                funding_rate=0.0003, funding_rate_apr=0.328,
+                combined_fee=0.0009, net_apr=0.22, reason="cross-exchange",
+            ),
+        ]
+        report = format_route_report(routes)
+        assert "OPTIMAL ROUTES" in report
+        assert "BTC/USDT" in report
