@@ -172,6 +172,14 @@ class MarketDataLoader:
                     .timestamp()
                     * 1000
                 )
+                stmt = stmt.where(OHLCVRecord.timestamp >= start_ms)
+            if end_date:
+                end_ms = int(
+                    datetime.strptime(end_date, "%Y-%m-%d")
+                    .replace(tzinfo=UTC)
+                    .timestamp()
+                    * 1000
+                )
                 stmt = stmt.where(OHLCVRecord.timestamp <= end_ms)
 
             stmt = stmt.order_by(OHLCVRecord.timestamp)
