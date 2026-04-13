@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
-from tradingbot.config.settings import FeeConfig, RiskConfig, StrategyConfig
+from tradingbot.config.settings import RiskConfig, StrategyConfig
 from tradingbot.data.feed import MarketDataFeed
 from tradingbot.exchanges.base import (
     Balance,

@@ -8,7 +8,7 @@ import pytest
 
 from tradingbot.config.settings import RiskConfig
 from tradingbot.core.risk import RiskManager
-from tradingbot.exchanges.base import Balance, Position, PositionSide
+from tradingbot.exchanges.base import Balance
 
 
 class TestRiskManager:

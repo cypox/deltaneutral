@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
 
 from tradingbot.config.settings import Settings
 from tradingbot.core.portfolio import Portfolio

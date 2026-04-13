@@ -42,8 +42,6 @@ def run(config: str) -> None:
 @click.option("--output", "-o", default=None, help="Output directory for results")
 def backtest(config: str, symbol: str, output: str | None) -> None:
     """Run a backtest of the delta-neutral strategy."""
-    import pandas as pd
-
     from tradingbot.backtesting.engine import BacktestEngine
     from tradingbot.config.settings import Settings
     from tradingbot.data.storage import DataStore
@@ -107,7 +105,10 @@ def backtest(config: str, symbol: str, output: str | None) -> None:
 @click.option("--timeframe", "-t", default="1h", help="Candle timeframe")
 @click.option("--start", default="2024-01-01", help="Start date (YYYY-MM-DD)")
 @click.option("--end", default=None, help="End date (YYYY-MM-DD)")
-def download(config: str, exchange: str, symbol: str, timeframe: str, start: str, end: str | None) -> None:
+def download(
+    config: str, exchange: str, symbol: str,
+    timeframe: str, start: str, end: str | None,
+) -> None:
     """Download historical market data."""
     from tradingbot.config.settings import Settings
     from tradingbot.data.loader import MarketDataLoader
@@ -150,7 +151,10 @@ def download(config: str, exchange: str, symbol: str, timeframe: str, start: str
 @main.command()
 @click.option("--config", "-c", default="config/config.yaml", help="Config file path")
 @click.option("--capital", default=500.0, help="Your total capital in USD across all exchanges")
-@click.option("--exchanges", "-e", multiple=True, default=["binance", "bybit"], help="Exchanges to scan")
+@click.option(
+    "--exchanges", "-e", multiple=True,
+    default=["binance", "bybit"], help="Exchanges to scan",
+)
 @click.option("--top", default=20, help="Number of top opportunities to show")
 def scan(config: str, capital: float, exchanges: tuple[str, ...], top: int) -> None:
     """Scan exchanges for the best funding rate arbitrage pairs.
@@ -202,11 +206,17 @@ def scan(config: str, capital: float, exchanges: tuple[str, ...], top: int) -> N
 
 @main.command()
 @click.option("--capital", default=500.0, help="Your total capital in USD")
-@click.option("--funding-rate", default=0.0001, help="Assumed per-8h funding rate (e.g., 0.0001 = 0.01%)")
-@click.option("--taker-fee", default=0.0005, help="Taker fee rate (e.g., 0.0005 = 0.05%)")
+@click.option(
+    "--funding-rate", default=0.0001,
+    help="Assumed per-8h funding rate (e.g., 0.0001 = 0.01%)",
+)
+@click.option("--taker-fee", default=0.0005, help="Taker fee rate")
 @click.option("--leverage", default=3, help="Perpetual leverage")
-@click.option("--hold-days", default=30, help="Expected position hold duration in days")
-def estimate(capital: float, funding_rate: float, taker_fee: float, leverage: int, hold_days: int) -> None:
+@click.option("--hold-days", default=30, help="Expected hold duration in days")
+def estimate(
+    capital: float, funding_rate: float, taker_fee: float,
+    leverage: int, hold_days: int,
+) -> None:
     """Estimate returns for a given capital and funding rate — no API keys needed.
 
     This is an offline calculator. Use `tradingbot scan` for live data.
@@ -282,7 +292,10 @@ def estimate(capital: float, funding_rate: float, taker_fee: float, leverage: in
 
 @main.command()
 @click.option("--config", "-c", default="config/config.yaml", help="Config file path")
-@click.option("--exchanges", "-e", multiple=True, default=["binance", "bybit"], help="Exchanges to rank")
+@click.option(
+    "--exchanges", "-e", multiple=True,
+    default=["binance", "bybit"], help="Exchanges to rank",
+)
 def rank(config: str, exchanges: tuple[str, ...]) -> None:
     """Rank exchanges by cost-effectiveness for delta-neutral trading.
 
@@ -331,7 +344,10 @@ def rank(config: str, exchanges: tuple[str, ...]) -> None:
 
 @main.command()
 @click.option("--config", "-c", default="config/config.yaml", help="Config file path")
-@click.option("--exchanges", "-e", multiple=True, default=["binance", "bybit"], help="Exchanges to check")
+@click.option(
+    "--exchanges", "-e", multiple=True,
+    default=["binance", "bybit"], help="Exchanges to check",
+)
 @click.option("--top", default=20, help="Number of top routes to show")
 def routes(config: str, exchanges: tuple[str, ...], top: int) -> None:
     """Find the optimal exchange route per symbol.

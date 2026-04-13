@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from tradingbot.exchanges.base import (
-    Balance,
     FeeSchedule,
     FundingRate,
     Ticker,
@@ -110,7 +109,9 @@ class TestPairScanner:
             assert opp.monthly_net_usd != 0
 
     @pytest.mark.asyncio
-    async def test_scan_multiple_exchanges(self, mock_exchange_high_funding, mock_exchange_low_funding):
+    async def test_scan_multiple_exchanges(
+        self, mock_exchange_high_funding, mock_exchange_low_funding,
+    ):
         scanner = PairScanner(
             exchanges={
                 "binance": mock_exchange_high_funding,
@@ -333,7 +334,9 @@ class TestRouteOptimization:
         return exchange
 
     @pytest.mark.asyncio
-    async def test_find_best_routes_returns_routes(self, mock_cheap_exchange, mock_expensive_exchange):
+    async def test_find_best_routes_returns_routes(
+        self, mock_cheap_exchange, mock_expensive_exchange,
+    ):
         scanner = PairScanner(
             exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
         )
@@ -343,7 +346,9 @@ class TestRouteOptimization:
         assert all(isinstance(r, ExchangeRoute) for r in routes)
 
     @pytest.mark.asyncio
-    async def test_find_best_routes_picks_cheapest(self, mock_cheap_exchange, mock_expensive_exchange):
+    async def test_find_best_routes_picks_cheapest(
+        self, mock_cheap_exchange, mock_expensive_exchange,
+    ):
         scanner = PairScanner(
             exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
         )
@@ -354,7 +359,9 @@ class TestRouteOptimization:
         assert best.perp_exchange == "cheap"
 
     @pytest.mark.asyncio
-    async def test_find_best_routes_sorted_by_net_apr(self, mock_cheap_exchange, mock_expensive_exchange):
+    async def test_find_best_routes_sorted_by_net_apr(
+        self, mock_cheap_exchange, mock_expensive_exchange,
+    ):
         scanner = PairScanner(
             exchanges={"cheap": mock_cheap_exchange, "expensive": mock_expensive_exchange}
         )

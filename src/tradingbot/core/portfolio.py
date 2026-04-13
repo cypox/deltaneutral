@@ -5,7 +5,6 @@ Portfolio tracker — tracks aggregate state across all positions and exchanges.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from tradingbot.exchanges.base import ExchangeBase
 from tradingbot.utils.logger import get_logger

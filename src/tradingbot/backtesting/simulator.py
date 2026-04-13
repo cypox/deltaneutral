@@ -5,10 +5,9 @@ and simulates order fills, funding payments, and fee deductions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 
@@ -198,7 +197,8 @@ class BacktestSimulator:
 
         # PnL from spot
         spot_proceeds = spot_amount * spot_fill_price
-        spot_entry_cost = spot_amount * (self._trade_log[-1]["spot_price"] if self._trade_log else spot_price)
+        last_spot = self._trade_log[-1]["spot_price"] if self._trade_log else spot_price
+        spot_entry_cost = spot_amount * last_spot
 
         # PnL from perp (short position)
         perp_pnl = pos.amount * (pos.entry_price - perp_fill_price)
