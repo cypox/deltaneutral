@@ -11,14 +11,12 @@ Handles:
 from __future__ import annotations
 
 import asyncio
-import uuid
-from typing import Any
 
 from tradingbot.config.settings import ExecutionConfig
 from tradingbot.exchanges.base import ExchangeBase, OrderResult, OrderSide, OrderType
 from tradingbot.strategy.base import Signal
 from tradingbot.strategy.delta_neutral import ActivePosition
-from tradingbot.utils.helpers import bps_to_decimal, retry_async, round_to_precision
+from tradingbot.utils.helpers import bps_to_decimal, retry_async
 from tradingbot.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -141,8 +139,6 @@ class OrderExecutor:
         """Execute entry using TWAP to minimize market impact."""
         spot_amount = signal.metadata.get("spot_amount", 0)
         perp_amount = signal.metadata.get("perp_amount", 0)
-        spot_ask = signal.metadata.get("spot_ask", 0)
-        perp_bid = signal.metadata.get("perp_bid", 0)
 
         n_slices = self._config.twap_slices
         spot_slice = spot_amount / n_slices
@@ -185,7 +181,10 @@ class OrderExecutor:
                 avg_spot_price += (spot_order.price or spot_ticker.ask) * spot_order.filled
                 avg_perp_price += (perp_order.price or perp_ticker.bid) * perp_order.filled
 
-                log.info("twap_slice", slice=i + 1, of=n_slices, spot=spot_order.filled, perp=perp_order.filled)
+                log.info(
+                    "twap_slice", slice=i + 1, of=n_slices,
+                    spot=spot_order.filled, perp=perp_order.filled,
+                )
 
                 if i < n_slices - 1:
                     await asyncio.sleep(self._config.twap_interval)

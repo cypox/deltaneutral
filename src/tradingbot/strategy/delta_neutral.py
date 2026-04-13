@@ -12,7 +12,7 @@ This strategy:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from tradingbot.config.settings import FeeConfig, RiskConfig, StrategyConfig
@@ -117,7 +117,7 @@ class DeltaNeutralStrategy(BaseStrategy):
 
     async def on_funding(self, symbol: str, exchange: str, rate: float) -> None:
         """Record a funding payment for active positions."""
-        for key, pos in self._active_positions.items():
+        for _key, pos in self._active_positions.items():
             if pos.symbol == symbol and pos.perp_exchange == exchange:
                 # If we're short perp and funding rate is positive, we receive funding
                 funding_payment = abs(pos.perp_amount) * pos.perp_entry_price * rate
@@ -278,7 +278,10 @@ class DeltaNeutralStrategy(BaseStrategy):
         # 2. Calculate position size
         remaining_exposure = self._config.max_total_exposure_usd - self._total_exposure_usd
         max_from_spot = spot_balance.free - self._risk_config.min_free_margin_usd
-        max_from_perp = (perp_balance.free - self._risk_config.min_free_margin_usd) * self._config.max_leverage
+        max_from_perp = (
+            (perp_balance.free - self._risk_config.min_free_margin_usd)
+            * self._config.max_leverage
+        )
 
         position_usd = min(
             self._config.max_position_usd,
@@ -436,7 +439,9 @@ class DeltaNeutralStrategy(BaseStrategy):
             position.spot_entry_price, position.spot_amount
         )
 
-    def remove_position(self, symbol: str, spot_exchange: str, perp_exchange: str) -> ActivePosition | None:
+    def remove_position(
+        self, symbol: str, spot_exchange: str, perp_exchange: str,
+    ) -> ActivePosition | None:
         """Remove a closed position."""
         key = f"{symbol}:{spot_exchange}:{perp_exchange}"
         pos = self._active_positions.pop(key, None)

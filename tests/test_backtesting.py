@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
 import pandas as pd
-import numpy as np
+import pytest
 
 from tradingbot.backtesting.engine import BacktestEngine, BacktestResult
 from tradingbot.backtesting.simulator import BacktestSimulator
-from tradingbot.config.settings import BacktestConfig, FeeConfig, StrategyConfig
+from tradingbot.config.settings import BacktestConfig
 
 
 class TestBacktestSimulator:
@@ -86,14 +85,18 @@ class TestBacktestEngine:
         )
         return BacktestEngine(strategy_config, backtest_config, fee_config)
 
-    def test_run_backtest(self, engine, sample_spot_prices, sample_perp_prices, sample_funding_rates):
+    def test_run_backtest(
+        self, engine, sample_spot_prices, sample_perp_prices, sample_funding_rates,
+    ):
         result = engine.run(sample_spot_prices, sample_perp_prices, sample_funding_rates)
 
         assert isinstance(result, BacktestResult)
         assert not result.equity_curve.empty
         assert result.metrics.total_return != 0 or result.metrics.total_trades == 0
 
-    def test_backtest_summary(self, engine, sample_spot_prices, sample_perp_prices, sample_funding_rates):
+    def test_backtest_summary(
+        self, engine, sample_spot_prices, sample_perp_prices, sample_funding_rates,
+    ):
         result = engine.run(sample_spot_prices, sample_perp_prices, sample_funding_rates)
         summary = result.print_summary()
         assert "BACKTEST RESULTS" in summary

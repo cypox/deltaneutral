@@ -502,7 +502,6 @@ class PairScanner:
         position_usd = spot_capital
 
         spot_price = spot_ticker.ask
-        position_amount = position_usd / spot_price  # e.g., $250 / $60000 = 0.00417 BTC
 
         # Daily funding income: position_notional × rate × 3 payments/day
         daily_funding_usd = position_usd * funding.rate * 3
@@ -599,7 +598,11 @@ def format_exchange_ranking(rankings: list[ExchangeScore]) -> str:
 
     lines.append("=" * 80)
     if rankings:
-        lines.append(f"  Best exchange: {rankings[0].exchange} (score: {rankings[0].composite_score:.2f})")
+        best = rankings[0]
+        lines.append(
+            f"  Best exchange: {best.exchange}"
+            f" (score: {best.composite_score:.2f})"
+        )
         lines.append("  Score weights: 40% low fees, 35% high funding, 25% symbol availability")
     lines.append("")
 
@@ -629,7 +632,10 @@ def format_route_report(routes: list[ExchangeRoute]) -> str:
 
     lines.append("=" * 90)
     if routes:
-        lines.append(f"  Top route: {routes[0].symbol} via {routes[0].spot_exchange}→{routes[0].perp_exchange}")
+        lines.append(
+            f"  Top route: {routes[0].symbol}"
+            f" via {routes[0].spot_exchange}→{routes[0].perp_exchange}"
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -673,7 +679,10 @@ def format_scan_report(result: ScanResult) -> str:
     best = result.best
     if best:
         lines.append(f"  Best pair: {best.symbol} ({best.spot_exchange}→{best.perp_exchange})")
-        lines.append(f"  Funding rate: {best.funding_rate:.6f} per 8h = {best.funding_rate_apr:.2%} APR")
+        lines.append(
+            f"  Funding rate: {best.funding_rate:.6f} per 8h"
+            f" = {best.funding_rate_apr:.2%} APR"
+        )
         lines.append(f"  Net APR (after fees): {best.net_apr:.2%}")
         lines.append("")
         lines.append(f"  With ${result.capital_usd:,.0f} capital:")
@@ -688,7 +697,10 @@ def format_scan_report(result: ScanResult) -> str:
     daily_multi = result.total_daily_estimate(max_positions=3)
     if daily_multi > 0:
         lines.append("")
-        lines.append(f"  If spread across top 3 pairs: ~${daily_multi:.4f}/day = ~${daily_multi*30:.2f}/month")
+        lines.append(
+            f"  If spread across top 3 pairs:"
+            f" ~${daily_multi:.4f}/day = ~${daily_multi*30:.2f}/month"
+        )
 
     lines.append("")
     lines.append("  ⚠ These are estimates based on CURRENT funding rates.")

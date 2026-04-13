@@ -55,7 +55,7 @@ class PositionReconciler:
         """Run full reconciliation on all active positions."""
         result = ReconciliationResult()
 
-        for key, pos in positions.items():
+        for _key, pos in positions.items():
             await self._check_position(pos, result)
 
         if result.ok:
@@ -118,7 +118,10 @@ class PositionReconciler:
 
             # Check 3: Margin health
             if exchange_pos.liquidation_price > 0 and exchange_pos.mark_price > 0:
-                distance_to_liq = abs(exchange_pos.mark_price - exchange_pos.liquidation_price) / exchange_pos.mark_price
+                distance_to_liq = (
+                    abs(exchange_pos.mark_price - exchange_pos.liquidation_price)
+                    / exchange_pos.mark_price
+                )
                 if distance_to_liq < 0.10:  # Within 10% of liquidation
                     result.warnings.append(
                         f"{pos.symbol}: close to liquidation "

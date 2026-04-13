@@ -15,7 +15,6 @@ from typing import Any
 
 from tradingbot.config.settings import RiskConfig
 from tradingbot.exchanges.base import ExchangeBase
-from tradingbot.utils.helpers import calculate_notional
 from tradingbot.utils.logger import get_logger
 from tradingbot.utils.metrics import funding_rate_to_apr
 
@@ -25,7 +24,10 @@ log = get_logger(__name__)
 class RiskAlert:
     """A risk event that may require action."""
 
-    def __init__(self, level: str, category: str, message: str, data: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, level: str, category: str, message: str,
+        data: dict[str, Any] | None = None,
+    ) -> None:
         self.level = level  # "warning", "critical", "emergency"
         self.category = category
         self.message = message
@@ -66,7 +68,10 @@ class RiskManager:
                     RiskAlert(
                         level="emergency",
                         category="drawdown",
-                        message=f"Max drawdown breached: {drawdown:.4%} >= {self._config.max_drawdown_pct:.4%}",
+                        message=(
+                            f"Max drawdown breached: {drawdown:.4%}"
+                            f" >= {self._config.max_drawdown_pct:.4%}"
+                        ),
                         data={"drawdown": drawdown, "peak": self._peak_equity, "current": equity},
                     )
                 )
@@ -113,7 +118,10 @@ class RiskManager:
                         RiskAlert(
                             level="warning",
                             category="margin",
-                            message=f"{ex_name}: free margin ${balance.free:.2f} below ${self._config.min_free_margin_usd:.2f}",
+                            message=(
+                                f"{ex_name}: free margin ${balance.free:.2f}"
+                                f" below ${self._config.min_free_margin_usd:.2f}"
+                            ),
                             data={"exchange": ex_name, "free": balance.free},
                         )
                     )
@@ -128,7 +136,10 @@ class RiskManager:
                                 RiskAlert(
                                     level=level,
                                     category="liquidation",
-                                    message=f"{ex_name} {pos.symbol}: {distance:.2%} from liquidation",
+                                    message=(
+                                        f"{ex_name} {pos.symbol}:"
+                                        f" {distance:.2%} from liquidation"
+                                    ),
                                     data={
                                         "exchange": ex_name,
                                         "symbol": pos.symbol,
@@ -163,11 +174,17 @@ class RiskManager:
                         level="warning",
                         category="funding_rate",
                         message=f"{exchange.name} {symbol}: funding rate {apr:.2%} APR too high",
-                        data={"exchange": exchange.name, "symbol": symbol, "rate": fr.rate, "apr": apr},
+                        data={
+                            "exchange": exchange.name, "symbol": symbol,
+                            "rate": fr.rate, "apr": apr,
+                        },
                     )
                 )
         except Exception as e:
-            log.warning("funding_rate_check_failed", exchange=exchange.name, symbol=symbol, error=str(e))
+            log.warning(
+                "funding_rate_check_failed",
+                exchange=exchange.name, symbol=symbol, error=str(e),
+            )
 
         return alerts
 
@@ -176,7 +193,10 @@ class RiskManager:
             "is_halted": self._is_halted,
             "peak_equity": self._peak_equity,
             "current_equity": self._current_equity,
-            "drawdown": (self._peak_equity - self._current_equity) / self._peak_equity if self._peak_equity > 0 else 0,
+            "drawdown": (
+                (self._peak_equity - self._current_equity) / self._peak_equity
+                if self._peak_equity > 0 else 0
+            ),
             "consecutive_errors": self._consecutive_errors,
         }
 

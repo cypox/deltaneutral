@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from tradingbot.exchanges.base import ExchangeBase, FundingRate, Ticker
 from tradingbot.utils.logger import get_logger
@@ -55,7 +56,7 @@ class MarketDataFeed:
 
         while self._running:
             tasks = []
-            for ex_name, exchange in self._exchanges.items():
+            for _ex_name, exchange in self._exchanges.items():
                 tasks.append(self._poll_exchange(exchange, symbols))
             await asyncio.gather(*tasks, return_exceptions=True)
 

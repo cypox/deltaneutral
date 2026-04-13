@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
 import pandas as pd
+import pytest
 
 from tradingbot.data.feed import MarketDataFeed
 from tradingbot.data.storage import DataStore
-from tradingbot.exchanges.base import FundingRate, Ticker
+from tradingbot.exchanges.base import Ticker
 from tradingbot.utils.helpers import bps_to_decimal, round_to_precision
 from tradingbot.utils.metrics import compute_metrics, funding_rate_to_apr
 

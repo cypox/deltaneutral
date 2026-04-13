@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
-from tradingbot.config.settings import RiskConfig
 from tradingbot.core.risk import RiskManager
 from tradingbot.exchanges.base import Balance
 

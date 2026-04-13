@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from tradingbot.config.settings import RiskConfig, StrategyConfig
 from tradingbot.data.feed import MarketDataFeed
 from tradingbot.exchanges.base import (
     Balance,
-    FeeSchedule,
     FundingRate,
     Position,
     PositionSide,

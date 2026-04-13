@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -39,11 +39,17 @@ class MarketDataLoader:
         end_date: str | None = None,
     ) -> int:
         """Download OHLCV data in paginated batches."""
-        start_ms = int(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+        start_ms = int(
+            datetime.strptime(start_date, "%Y-%m-%d")
+            .replace(tzinfo=UTC).timestamp() * 1000
+        )
         if end_date:
-            end_ms = int(datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+            end_ms = int(
+                datetime.strptime(end_date, "%Y-%m-%d")
+                .replace(tzinfo=UTC).timestamp() * 1000
+            )
         else:
-            end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            end_ms = int(datetime.now(UTC).timestamp() * 1000)
 
         tf_ms = TIMEFRAME_MS.get(timeframe, MS_PER_HOUR)
         total_inserted = 0
@@ -64,7 +70,9 @@ class MarketDataLoader:
             if not candles:
                 break
 
-            inserted = await self._store.insert_ohlcv_batch(exchange.name, symbol, timeframe, candles)
+            inserted = await self._store.insert_ohlcv_batch(
+                exchange.name, symbol, timeframe, candles,
+            )
             total_inserted += inserted
 
             last_ts = int(candles[-1][0])
@@ -91,11 +99,17 @@ class MarketDataLoader:
         end_date: str | None = None,
     ) -> int:
         """Download historical funding rate data."""
-        start_ms = int(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+        start_ms = int(
+            datetime.strptime(start_date, "%Y-%m-%d")
+            .replace(tzinfo=UTC).timestamp() * 1000
+        )
         if end_date:
-            end_ms = int(datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+            end_ms = int(
+                datetime.strptime(end_date, "%Y-%m-%d")
+                .replace(tzinfo=UTC).timestamp() * 1000
+            )
         else:
-            end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            end_ms = int(datetime.now(UTC).timestamp() * 1000)
 
         total_inserted = 0
         since = start_ms
@@ -154,15 +168,7 @@ class MarketDataLoader:
             if start_date:
                 start_ms = int(
                     datetime.strptime(start_date, "%Y-%m-%d")
-                    .replace(tzinfo=timezone.utc)
-                    .timestamp()
-                    * 1000
-                )
-                stmt = stmt.where(OHLCVRecord.timestamp >= start_ms)
-            if end_date:
-                end_ms = int(
-                    datetime.strptime(end_date, "%Y-%m-%d")
-                    .replace(tzinfo=timezone.utc)
+                    .replace(tzinfo=UTC)
                     .timestamp()
                     * 1000
                 )
@@ -213,7 +219,7 @@ class MarketDataLoader:
             if start_date:
                 start_ms = int(
                     datetime.strptime(start_date, "%Y-%m-%d")
-                    .replace(tzinfo=timezone.utc)
+                    .replace(tzinfo=UTC)
                     .timestamp()
                     * 1000
                 )
@@ -221,7 +227,7 @@ class MarketDataLoader:
             if end_date:
                 end_ms = int(
                     datetime.strptime(end_date, "%Y-%m-%d")
-                    .replace(tzinfo=timezone.utc)
+                    .replace(tzinfo=UTC)
                     .timestamp()
                     * 1000
                 )

@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class OrderSide(str, Enum):
+class OrderSide(StrEnum):
     BUY = "buy"
     SELL = "sell"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     MARKET = "market"
     LIMIT = "limit"
 
 
-class PositionSide(str, Enum):
+class PositionSide(StrEnum):
     LONG = "long"
     SHORT = "short"
 

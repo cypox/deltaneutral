@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from tradingbot.config.settings import ExecutionConfig
 from tradingbot.exchanges.base import (
     OrderResult,
     OrderSide,
