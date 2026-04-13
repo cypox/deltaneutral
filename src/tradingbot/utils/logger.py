@@ -33,4 +33,4 @@ def setup_logging(level: str = "INFO") -> None:
 
 def get_logger(name: str, **initial_ctx: Any) -> structlog.stdlib.BoundLogger:
     """Get a named logger with optional initial context."""
-    return structlog.get_logger(name, **initial_ctx)
+    return structlog.get_logger(name, **initial_ctx)  # type: ignore[no-any-return]

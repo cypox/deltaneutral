@@ -270,7 +270,7 @@ class OrderExecutor:
         """Place an order with retry logic and timeout for limit orders."""
         order_type = OrderType.LIMIT if price else OrderType.MARKET
 
-        order = await retry_async(
+        order: OrderResult = await retry_async(
             exchange.create_order,
             symbol=symbol,
             side=side,

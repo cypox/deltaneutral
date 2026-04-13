@@ -194,8 +194,8 @@ class DeltaNeutralStrategy(BaseStrategy):
         exchange_names = list(exchange_data.keys())
         for spot_ex in exchange_names:
             for perp_ex in exchange_names:
-                funding: FundingRate = exchange_data[perp_ex]["funding"]
-                funding_apr = funding_rate_to_apr(funding.rate)
+                perp_funding: FundingRate = exchange_data[perp_ex]["funding"]
+                funding_apr = funding_rate_to_apr(perp_funding.rate)
 
                 # Only interested in positive funding (longs pay shorts)
                 if funding_apr < self._config.min_funding_rate_apr:
@@ -246,7 +246,7 @@ class DeltaNeutralStrategy(BaseStrategy):
                         perp_exchange=perp_ex,
                         spot_ask=spot_ticker.ask,
                         perp_bid=perp_ticker.bid,
-                        funding_rate=funding.rate,
+                        funding_rate=perp_funding.rate,
                         funding_rate_apr=funding_apr,
                         spread_pct=spread_pct,
                         estimated_fees_pct=estimated_fees_pct,

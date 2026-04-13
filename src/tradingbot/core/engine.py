@@ -123,7 +123,8 @@ class TradingEngine:
         while self._running:
             try:
                 # 1. Poll market data
-                await self._feed.poll_once(self._config.strategy.symbols)
+                if self._feed is not None:
+                    await self._feed.poll_once(self._config.strategy.symbols)
 
                 # 2. Risk checks
                 if tick_count % max(1, health_interval // tick_interval) == 0:

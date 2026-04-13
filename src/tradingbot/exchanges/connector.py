@@ -229,7 +229,7 @@ class CCXTConnector(ExchangeBase):
     async def fetch_ohlcv(
         self, symbol: str, timeframe: str = "1h", since: int | None = None, limit: int = 500
     ) -> list[list[float]]:
-        return await self.exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
+        return await self.exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)  # type: ignore[no-any-return]
 
     async def fetch_funding_rate_history(
         self, symbol: str, since: int | None = None, limit: int = 100
