@@ -28,7 +28,7 @@ class TestRiskManager:
     def test_drawdown_warning(self, risk_manager):
         """Should warn when approaching max drawdown."""
         risk_manager.update_equity(100_000)
-        alerts = risk_manager.update_equity(96_000)  # 4% = 80% of 5% limit
+        alerts = risk_manager.update_equity(95_500)  # 4.5% drawdown > 80% of 5% limit
 
         assert len(alerts) > 0
         assert any(a.level == "warning" for a in alerts)

@@ -76,7 +76,8 @@ class BacktestEngine:
                     if rate is not None:
                         apr = funding_rate_to_apr(rate)
                         if apr < self._strategy_config.exit_funding_rate_apr:
-                            sim.close_position(spot_prices.index[0].freq or "BTC/USDT", timestamp)
+                            symbol = self._strategy_config.symbols[0] if self._strategy_config.symbols else "BTC/USDT"
+                            sim.close_position(symbol, timestamp)
                             position_open = False
 
             # Check for entry opportunity
